@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0507">
+<title>Revenge 4 You</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Heebo:wght@400;600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Revenge 4U">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<div id="app">
+
+  <!-- MAIN MENU -->
+  <section class="screen active" id="menu">
+    <button class="gear" data-go="settings" data-i18n-aria="settings">⚙️</button>
+    <div class="hero">
+      <canvas id="boom"></canvas>
+      <div class="shock"></div>
+      <div class="logo" dir="ltr">
+        <div class="logo-top">REVENGE</div>
+        <div class="logo-bottom">4 YOU!</div>
+      </div>
+    </div>
+    <nav class="menu-buttons">
+      <button class="mbtn primary" data-go="create"><span class="ic">💥</span><span data-i18n="menu_new"></span></button>
+      <button class="mbtn" data-go="active"><span class="ic">🔥</span><span data-i18n="menu_active"></span><span class="badge" id="badge-active"></span></button>
+      <button class="mbtn" data-go="favorites"><span class="ic">⭐</span><span data-i18n="menu_fav"></span><span class="badge" id="badge-fav"></span></button>
+      <button class="mbtn" data-go="archive"><span class="ic">🗂️</span><span data-i18n="menu_archive"></span></button>
+    </nav>
+  </section>
+
+  <!-- NEW REVENGE -->
+  <section class="screen" id="create">
+    <header class="bar"><button class="back" data-go="menu" data-i18n-aria="back">‹</button><h1 data-i18n="menu_new"></h1></header>
+    <div class="content">
+      <form id="create-form" class="form" autocomplete="off">
+        <label class="field">
+          <span class="lbl" data-i18n="who"></span>
+          <div class="people-box" id="people-box">
+            <div id="chips" class="chips"></div>
+            <input id="person-input" data-i18n-ph="type_name" enterkeyhint="done">
+          </div>
+          <div class="suggest" id="suggest"></div>
+          <span class="hint" data-i18n="many_people"></span>
+        </label>
+
+        <div class="field">
+          <span class="lbl"><span data-i18n="picture"></span> <em data-i18n="optional"></em></span>
+          <div id="photo-area">
+            <label class="photo-pick" id="photo-pick">
+              <input type="file" id="photo-input" accept="image/*" hidden>
+              <span class="big">📷</span><span data-i18n="upload_pic"></span>
+            </label>
+            <div class="photo-preview" id="photo-preview" hidden>
+              <img id="photo-img" alt="">
+              <button type="button" class="photo-x" id="photo-remove" data-i18n-aria="remove_pic">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="lbl" data-i18n="what_do"></span>
+          <textarea id="plan-input" rows="5" data-i18n-ph="describe_plan"></textarea>
+        </label>
+
+        <div class="form-err" id="form-err"></div>
+        <button type="submit" class="mbtn primary create-btn"><span class="ic">💥</span><span data-i18n="create"></span></button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ACTIVE -->
+  <section class="screen" id="active">
+    <header class="bar"><button class="back" data-go="menu" data-i18n-aria="back">‹</button><h1 data-i18n="menu_active"></h1></header>
+    <div class="content" id="list-active"></div>
+  </section>
+
+  <!-- FAVORITES -->
+  <section class="screen" id="favorites">
+    <header class="bar"><button class="back" data-go="menu" data-i18n-aria="back">‹</button><h1 data-i18n="menu_fav"></h1></header>
+    <div class="content" id="list-favorites"></div>
+  </section>
+
+  <!-- ARCHIVE -->
+  <section class="screen" id="archive">
+    <header class="bar"><button class="back" data-go="menu" data-i18n-aria="back">‹</button><h1 data-i18n="menu_archive"></h1></header>
+    <div class="content" id="list-archive"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="screen" id="settings">
+    <header class="bar"><button class="back" data-go="menu" data-i18n-aria="back">‹</button><h1 data-i18n="settings"></h1></header>
+    <div class="content">
+      <div class="set-group" id="install-group" hidden>
+        <div class="set-title">📲 <span data-i18n="install_title"></span></div>
+        <div class="set-hint" id="install-hint"></div>
+        <button class="act go wide" id="install-btn" data-i18n="install_btn" hidden></button>
+      </div>
+      <div class="set-group">
+        <div class="set-title">🌐 <span data-i18n="language"></span></div>
+        <div class="set-hint" data-i18n="language_hint"></div>
+        <div class="seg seg-lang" id="seg-lang"></div>
+      </div>
+      <div class="set-group">
+        <div class="set-title">🎨 <span data-i18n="theme"></span></div>
+        <div class="set-hint" data-i18n="theme_hint"></div>
+        <div class="seg" id="seg-theme">
+          <button data-theme="original" data-i18n="th_original"></button>
+          <button data-theme="office" data-i18n="th_office"></button>
+        </div>
+      </div>
+      <div class="set-group">
+        <div class="set-title" data-i18n="display"></div>
+        <div class="set-hint" data-i18n="display_hint"></div>
+        <div class="seg" id="seg-view">
+          <button data-view="auto" data-i18n="auto"></button>
+          <button data-view="phone" data-i18n="phone"></button>
+          <button data-view="pc" data-i18n="computer"></button>
+        </div>
+      </div>
+      <div class="set-group">
+        <div class="set-title" data-i18n="data"></div>
+        <div class="set-hint" id="set-count"></div>
+        <button class="act del wide" id="wipe" data-i18n="delete_all"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DETAILS SHEET -->
+  <div class="sheet-wrap" id="sheet">
+    <div class="sheet">
+      <button class="close" id="sheet-close">✕</button>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+</div>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
