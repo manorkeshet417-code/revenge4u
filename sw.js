@@ -1,5 +1,5 @@
 // REVENGE 4 YOU — offline support. Bump VERSION when files change.
-const VERSION = 'r4u-v1';
+const VERSION = 'r4u-v2';
 const SHELL = ['./', 'index.html', 'style.css', 'i18n.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'];
 

@@ -1,11 +1,15 @@
 // REVENGE 4 YOU — main app
 const KEY = 'revenge4u.v1';
 const PEOPLE_KEY = 'revenge4u.people';
+const DELETED_KEY = 'revenge4u.deleted';
 
 /* revenge = { id, people:[names], photo:dataURL|null, plan, createdAt,
-               completedAt|null, canceledAt|null, note, favorite } */
+               completedAt|null, canceledAt|null, note, favorite, updatedAt } */
 let revenges = load(KEY, []);
 let people = load(PEOPLE_KEY, []);   // remembered names, for suggestions
+let deleted = load(DELETED_KEY, {}); // id -> time it was deleted forever (so other devices delete it too)
+const touch = r => { r.updatedAt = Date.now(); };
+const stamp = r => r.updatedAt || r.createdAt || 0;
 
 function load(k, def) {
   try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; }
@@ -14,11 +18,13 @@ function save() {
   try {
     localStorage.setItem(KEY, JSON.stringify(revenges));
     localStorage.setItem(PEOPLE_KEY, JSON.stringify(people));
+    localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
   } catch (e) {
     alert(t('storage_full'));
     return false;
   }
   updateBadges();
+  if (typeof scheduleSync === 'function') scheduleSync();
   return true;
 }
 
@@ -110,7 +116,7 @@ document.addEventListener('click', e => {
 
 function toggleFav(id) {
   const r = revenges.find(x => x.id === id); if (!r) return;
-  r.favorite = !r.favorite; save(); rerender();
+  r.favorite = !r.favorite; touch(r); save(); rerender();
   if (sheetId === id) openSheet(id);
 }
 
@@ -222,7 +228,7 @@ form.addEventListener('submit', e => {
   for (const n of chosen) if (!people.some(p => sameName(p, n))) people.push(n);
   const r = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     people: [...chosen], photo: photoData, plan, createdAt: Date.now(),
-    completedAt: null, canceledAt: null, note: '', favorite: false };
+    completedAt: null, canceledAt: null, note: '', favorite: false, updatedAt: Date.now() };
   revenges.push(r);
   if (!save()) { revenges.pop(); return; }
   go('active');
@@ -252,6 +258,7 @@ function openSheet(id, mode) {
       ${st === 'active' ? `<button class="act go" data-act="close">${t('close_btn')}</button>` : ''}
       <button class="act" data-act="fav">${t(r.favorite ? 'unfav' : 'fav')}</button>
       ${st === 'active' ? `<button class="act del" data-act="cancel">${t('delete_btn')}</button>` : ''}
+      <button class="act del" data-act="purge">${t('purge_btn')}</button>
     </div>`;
   }
   document.getElementById('sheet-body').innerHTML = `
@@ -283,13 +290,18 @@ sheet.addEventListener('click', e => {
     case 'confirm-close':
       r.completedAt = Date.now();
       r.note = document.getElementById('note-input').value.trim();
-      save(); closeSheet(); rerender(); return;
+      touch(r); save(); closeSheet(); rerender(); return;
     case 'cancel':
       if (!confirm(t('confirm_cancel'))) return;
       r.canceledAt = Date.now();
-      save(); closeSheet(); rerender(); return;
+      touch(r); save(); closeSheet(); rerender(); return;
     case 'fav':
-      r.favorite = !r.favorite; save(); rerender(); return openSheet(r.id);
+      r.favorite = !r.favorite; touch(r); save(); rerender(); return openSheet(r.id);
+    case 'purge':
+      if (!confirm(t('confirm_purge'))) return;
+      deleted[r.id] = Date.now();
+      revenges = revenges.filter(x => x !== r);
+      save(); closeSheet(); rerender(); return;
   }
 });
 
@@ -383,6 +395,8 @@ function renderSettings() {
 }
 document.getElementById('wipe').onclick = () => {
   if (!confirm(t('confirm_wipe'))) return;
+  const now = Date.now();
+  for (const r of revenges) deleted[r.id] = now;
   revenges = []; people = []; save(); renderSettings();
 };
 
@@ -415,7 +429,7 @@ function setLang(l) {
   try { localStorage.setItem('revenge4u.lang', l); } catch {}
   applyLang();
   langSeg.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === lang));
-  renderChips(); renderSettings(); renderInstall(); rerender();
+  renderChips(); renderSettings(); renderInstall(); renderSync(); rerender();
   if (sheetId) openSheet(sheetId);
 }
 
@@ -443,6 +457,147 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+/* ---------- sync between devices (Supabase) ---------- */
+// Devices that share one secret sync code share one copy on the server.
+// Each device pulls it, merges with its own (newest change wins), and pushes back.
+const SB_URL = 'https://wxrcjutwkkkttgbghmop.supabase.co';
+const SB_KEY = 'sb_publishable_YHOF2yawZKyJhRkUggYByg_reMYeY51';
+const SYNC_KEY = 'revenge4u.sync';
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+let sync = load(SYNC_KEY, null);        // { code, version }
+let syncState = 'idle', syncAt = 0, syncTimer = null, syncBusy = false, syncAgain = false;
+
+async function rpc(fn, body) {
+  const res = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(fn + ' ' + res.status);
+  return res.json();
+}
+const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), b => CODE_ABC[b % 32]).join('');
+const cleanCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const showCode = c => c.match(/.{1,5}/g).join('-');
+const saveSync = () => { try { sync ? localStorage.setItem(SYNC_KEY, JSON.stringify(sync)) : localStorage.removeItem(SYNC_KEY); } catch {} };
+
+function merge(remote) {
+  remote = remote || {};
+  const del = { ...(remote.deleted || {}) };
+  for (const [id, ts] of Object.entries(deleted)) del[id] = Math.max(del[id] || 0, ts);
+  const byId = new Map();
+  for (const r of [...(remote.revenges || []), ...revenges]) {
+    const cur = byId.get(r.id);
+    if (!cur || stamp(r) >= stamp(cur)) byId.set(r.id, r);
+  }
+  const list = [...byId.values()].filter(r => !(del[r.id] >= stamp(r)));
+  const ppl = [...(remote.people || [])];
+  for (const p of people) if (!ppl.some(x => sameName(x, p))) ppl.push(p);
+  return { revenges: list, people: ppl, deleted: del };
+}
+const sameData = (a, b) => JSON.stringify({ r: a.revenges || [], p: a.people || [], d: a.deleted || {} })
+                        === JSON.stringify({ r: b.revenges || [], p: b.people || [], d: b.deleted || {} });
+
+async function syncNow() {
+  if (!sync) return;
+  if (syncBusy) { syncAgain = true; return; }
+  syncBusy = true; syncState = 'busy'; renderSync();
+  try {
+    for (let tries = 0; tries < 4; tries++) {
+      const remote = await rpc('r4u_pull', { p_code: sync.code });
+      if (!remote) { syncState = 'bad'; break; }
+      const before = JSON.stringify([revenges, people]);
+      const merged = merge(remote.data);
+      if (!sameData(merged, remote.data || {})) {
+        const v = await rpc('r4u_push', { p_code: sync.code, p_data: merged, p_version: remote.version });
+        if (v === -1) continue;          // another device saved first — pull again
+        sync.version = v;
+      } else sync.version = remote.version;
+      revenges = merged.revenges; people = merged.people; deleted = merged.deleted;
+      saveSync(); saveLocal();
+      if (before !== JSON.stringify([revenges, people])) refreshAll();
+      syncState = 'ok'; syncAt = Date.now();
+      break;
+    }
+  } catch (e) {
+    syncState = 'err';
+  }
+  syncBusy = false; renderSync();
+  if (syncAgain) { syncAgain = false; syncNow(); }
+}
+function saveLocal() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(revenges));
+    localStorage.setItem(PEOPLE_KEY, JSON.stringify(people));
+    localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
+  } catch {}
+}
+function refreshAll() {
+  updateBadges(); rerender(); renderSettings();
+  if (sheetId) { if (revenges.some(r => r.id === sheetId)) openSheet(sheetId); else closeSheet(); }
+}
+function scheduleSync() {
+  if (!sync) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncNow, 1200);
+}
+
+function renderSync() {
+  const on = !!sync;
+  document.getElementById('sync-off').hidden = on;
+  document.getElementById('sync-on').hidden = !on;
+  document.getElementById('sync-hint').textContent = t(on ? 'sync_hint_on' : 'sync_hint_off');
+  if (!on) return;
+  document.getElementById('sync-code').textContent = showCode(sync.code);
+  const st = document.getElementById('sync-status');
+  st.className = 'sync-status ' + syncState;
+  st.textContent = syncState === 'busy' ? t('sync_busy')
+    : syncState === 'err' ? t('sync_err')
+    : syncState === 'bad' ? t('sync_bad')
+    : syncAt ? t('sync_ok', { d: new Date(syncAt).toLocaleTimeString(LANGS[lang].locale, { hour: '2-digit', minute: '2-digit' }) }) : '';
+}
+document.getElementById('sync-create').onclick = async e => {
+  const btn = e.currentTarget; btn.disabled = true;
+  try {
+    let code;
+    do { code = newCode(); } while (!(await rpc('r4u_create', { p_code: code })));
+    sync = { code, version: 0 }; saveSync(); syncAt = 0;
+    await syncNow();
+  } catch { alert(t('sync_err')); }
+  btn.disabled = false; renderSync();
+};
+document.getElementById('sync-connect').onclick = async e => {
+  const input = document.getElementById('sync-input');
+  const err = document.getElementById('sync-error');
+  const code = cleanCode(input.value);
+  err.textContent = '';
+  if (code.length < 20) { err.textContent = t('sync_bad'); return; }
+  const btn = e.currentTarget; btn.disabled = true;
+  try {
+    const remote = await rpc('r4u_pull', { p_code: code });
+    if (!remote) err.textContent = t('sync_bad');
+    else { sync = { code, version: remote.version }; saveSync(); input.value = ''; await syncNow(); }
+  } catch { err.textContent = t('sync_err'); }
+  btn.disabled = false; renderSync();
+};
+document.getElementById('sync-copy').onclick = async e => {
+  const b = e.currentTarget, old = b.textContent;
+  try { await navigator.clipboard.writeText(showCode(sync.code)); } catch {
+    const r = document.createRange(); r.selectNodeContents(document.getElementById('sync-code'));
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+  }
+  b.textContent = t('sync_copied'); setTimeout(() => { b.textContent = old; }, 1500);
+};
+document.getElementById('sync-now').onclick = () => syncNow();
+document.getElementById('sync-disconnect').onclick = () => {
+  if (!confirm(t('sync_confirm_disc'))) return;
+  sync = null; saveSync(); syncState = 'idle'; renderSync();
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
+addEventListener('online', () => syncNow());
+setInterval(() => { if (!document.hidden) syncNow(); }, 20000);
+
 setLang(lang);
 applyView();
 updateBadges();
+syncNow();

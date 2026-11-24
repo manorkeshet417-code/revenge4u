@@ -105,6 +105,28 @@
         <div class="set-hint" id="install-hint"></div>
         <button class="act go wide" id="install-btn" data-i18n="install_btn" hidden></button>
       </div>
+      <div class="set-group" id="sync-group">
+        <div class="set-title">☁️ <span data-i18n="sync_title"></span></div>
+        <div class="set-hint" id="sync-hint"></div>
+        <div id="sync-off">
+          <button class="act go wide" id="sync-create" data-i18n="sync_create"></button>
+          <div class="or"><span data-i18n="sync_or"></span></div>
+          <div class="sync-row">
+            <input id="sync-input" class="text-in" data-i18n-ph="sync_enter" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">
+            <button class="act" id="sync-connect" data-i18n="sync_connect"></button>
+          </div>
+          <div class="form-err" id="sync-error"></div>
+        </div>
+        <div id="sync-on" hidden>
+          <div class="code-box" id="sync-code" dir="ltr"></div>
+          <div class="actions">
+            <button class="act" id="sync-copy" data-i18n="sync_copy"></button>
+            <button class="act" id="sync-now" data-i18n="sync_now"></button>
+          </div>
+          <div class="sync-status" id="sync-status"></div>
+          <button class="act del wide" id="sync-disconnect" data-i18n="sync_disconnect"></button>
+        </div>
+      </div>
       <div class="set-group">
         <div class="set-title">🌐 <span data-i18n="language"></span></div>
         <div class="set-hint" data-i18n="language_hint"></div>
